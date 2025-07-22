@@ -1,10 +1,15 @@
-use app_core::process_query;
+use anyhow::{Context, Result, anyhow};
+use app_core::{AppSettings, AppState, process_query};
 use axum::{
     Json, Router,
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
-
 use serde::{Deserialize, Serialize};
+
+/*-------------------------------------- models -----------------------------------------*/
 
 #[derive(Deserialize)]
 struct QueryRequest {
@@ -16,20 +21,51 @@ struct QueryResponse {
     response: String,
 }
 
+// app error that wraps `anyhow::Error`.
+struct AppError(anyhow::Error);
+
+// Tell axum how to convert `AppError` into a response.
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Something went wrong: {}", self.0),
+        )
+            .into_response()
+    }
+}
+
+// This enables using `?` on functions that return `Result<_, anyhow::Error>` to turn them into `Result<_, AppError>`.
+impl<E> From<E> for AppError
+where
+    E: Into<anyhow::Error>,
+{
+    fn from(err: E) -> Self {
+        Self(err.into())
+    }
+}
+/*-------------------------------------- main -----------------------------------------*/
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
+    let settings = AppSettings::new().map_err(|e| anyhow!("Failed to load settings.Error: {e}"))?;
+    let app_state = AppState::new(settings)
+        .await
+        .context("Failed to initialize app state.")?;
     let app = Router::new()
         // `GET /` goes to a simple handler
         .route("/", get(root_handler))
         // `POST /api/query` goes to our new handler
-        .route("/api/query", post(api_query_handler));
+        .route("/api/query", post(api_query_handler))
+        .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
-    println!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
+    println!("listening on {}", listener.local_addr()?);
+    axum::serve(listener, app).await?;
+    Ok(())
 }
+
+/*-------------------------------------- handlers -----------------------------------------*/
 
 /// A simple handler for the root path
 async fn root_handler() -> &'static str {
@@ -39,17 +75,15 @@ async fn root_handler() -> &'static str {
 /// The main handler for our API. It accepts a JSON payload
 /// and returns a JSON response.
 async fn api_query_handler(
-    // This tells axum to deserialize the request body as JSON into our struct
+    State(state): State<AppState>,
     Json(payload): Json<QueryRequest>,
-) -> Json<QueryResponse> {
-    // Call the processing function from our core library
-    let response_string = process_query(&payload.query);
-    // For now, just construct a response and send it back
+) -> Result<Json<QueryResponse>, AppError> {
+    // Call processing function from core library
+    let response_string = process_query(&payload.query, &state).await?;
     let response = QueryResponse {
         response: format!("Received your query: '{}'", response_string),
     };
-
-    // `Json` will automatically serialize our struct into a JSON response
-    // and set the correct `Content-Type` header
-    Json(response)
+    Ok(Json(response))
 }
+
+

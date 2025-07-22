@@ -4,3 +4,9 @@ members = [
     "web_server",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+axum = "0.8.4"
+tokio = "1.46.1"
+serde = "1.0.219"
+anyhow = "1.0.98"
