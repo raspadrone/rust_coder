@@ -3,9 +3,24 @@ use config::{Config, File};
 use qdrant_client::Qdrant;
 use serde::Deserialize;
 
+use crate::sandbox::run_in_sandbox;
+
+pub mod sandbox;
+
 #[derive(Deserialize, Clone)]
 pub struct AppSettings {
     pub qdrant_url: String,
+}
+
+impl AppSettings {
+    /// Loads the application settings from the configuration file.
+    pub fn new() -> Result<Self> {
+        let s = Config::builder()
+            .add_source(File::with_name("config/default"))
+            .build()?;
+        let settings = s.try_deserialize()?;
+        Ok(settings)
+    }
 }
 
 #[derive(Clone)]
@@ -22,24 +37,28 @@ impl AppState {
 }
 
 /// The core query processing logic.
-pub async fn process_query(query: &str, state: &AppState) -> Result<String> {
-    // For now, just prove we can connect to Qdrant
-    let collections_list = state.qdrant_client.list_collections().await?;
-    let response = format!(
-        "Query: '{}'. Found {} collections in Qdrant.",
-        query,
-        collections_list.collections.len()
-    );
-    Ok(response)
-}
+pub async fn process_query(query: &str, _state: &AppState) -> Result<String> {
+    // For now, we'll test the sandbox with a hardcoded, valid piece of code.
+    let code_to_test = r#"
+        // fn main() {
+        //     println!("This code compiles!");
+        // }
+        fn main( { let x = ; }
+    "#;
 
-impl AppSettings {
-    /// Loads the application settings from the configuration file.
-    pub fn new() -> Result<Self> {
-        let s = Config::builder()
-            .add_source(File::with_name("config/default"))
-            .build()?;
-        let settings = s.try_deserialize()?;
-        Ok(settings)
-    }
+    let sandbox_result = run_in_sandbox(code_to_test).await?;
+
+    let response = if sandbox_result.success {
+        format!(
+            "Sandbox test for query '{}' succeeded! Output:\n---\n{}",
+            query, sandbox_result.output
+        )
+    } else {
+        format!(
+            "Sandbox test for query '{}' failed! Compiler errors:\n---\n{}",
+            query, sandbox_result.output
+        )
+    };
+
+    Ok(response)
 }

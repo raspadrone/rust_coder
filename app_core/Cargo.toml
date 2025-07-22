@@ -8,5 +8,6 @@ qdrant-client = "1.15.0"
 config = { version = "0.15.13", features = ["toml"] }
 
 anyhow = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
 serde = { workspace = true }
+tempfile = "3.20.0"
