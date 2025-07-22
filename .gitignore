@@ -1,0 +1,16 @@
+# This is a universal .gitignore for a Rust workspace
+
+# Ignore compiled artifacts and build outputs
+**/target/
+
+# Ignore the lock file. In an application, we commit this,
+# but for our learning process, we'll keep it flexible.
+# For a final product, you would remove this line.
+# Cargo.lock
+
+# Ignore editor and OS-specific files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

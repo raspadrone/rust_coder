@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "app_core",
+    "web_server",
+]
+resolver = "2"
