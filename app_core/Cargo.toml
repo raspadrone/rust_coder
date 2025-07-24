@@ -12,3 +12,4 @@ tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
 serde = { workspace = true }
 tempfile = "3.20.0"
 genai = { workspace = true }
+text-splitter = "0.27.0"

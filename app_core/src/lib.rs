@@ -8,6 +8,8 @@ use crate::{llm::generate_code, sandbox::run_in_sandbox};
 
 pub mod llm;
 pub mod sandbox;
+pub mod qdrant;
+
 
 #[derive(Deserialize, Clone)]
 pub struct AppSettings {
