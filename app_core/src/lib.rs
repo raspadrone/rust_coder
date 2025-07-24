@@ -6,6 +6,8 @@ use serde::Deserialize;
 use crate::sandbox::run_in_sandbox;
 
 pub mod sandbox;
+pub mod llm;
+
 
 #[derive(Deserialize, Clone)]
 pub struct AppSettings {
