@@ -6,10 +6,13 @@ edition = "2024"
 [dependencies]
 qdrant-client = "1.15.0"
 config = { version = "0.15.13", features = ["toml"] }
+tempfile = "3.20.0"
 
 anyhow = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs"] }
 serde = { workspace = true }
-tempfile = "3.20.0"
 genai = { workspace = true }
-text-splitter = "0.27.0"
+text-splitter = { workspace = true }
+uuid = { version = "1.9.1", features = ["v4"] }
+serde_json = "1.0.141"
+fastembed = "4.0.0"

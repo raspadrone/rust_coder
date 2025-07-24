@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use config::{Config, File};
+use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use genai::Client;
 use qdrant_client::Qdrant;
 use serde::Deserialize;
@@ -9,6 +12,7 @@ use crate::{llm::generate_code, sandbox::run_in_sandbox};
 pub mod llm;
 pub mod sandbox;
 pub mod qdrant;
+pub mod ingestion;
 
 
 #[derive(Deserialize, Clone)]
@@ -33,6 +37,7 @@ pub struct AppState {
     pub qdrant_client: Qdrant,
     pub genai_client: Client,
     pub model: String,
+    pub embedding_model: Arc<TextEmbedding>,
 }
 
 impl AppState {
@@ -41,13 +46,15 @@ impl AppState {
         let qdrant_client = Qdrant::from_url(&settings.qdrant_url).build()?;
         let genai_client = Client::default();
         let model = settings.llm_model;
-
+        // Initialize the embedding model
+        let embedding_model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::AllMiniLML6V2))?;
         // initialize qdrant collection if !exists
         qdrant::ensure_collection_exists(&qdrant_client).await?;
         Ok(Self {
             qdrant_client,
             genai_client,
             model,
+            embedding_model: Arc::new(embedding_model)
         })
     }
 }
