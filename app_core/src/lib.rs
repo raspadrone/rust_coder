@@ -41,6 +41,9 @@ impl AppState {
         let qdrant_client = Qdrant::from_url(&settings.qdrant_url).build()?;
         let genai_client = Client::default();
         let model = settings.llm_model;
+
+        // initialize qdrant collection if !exists
+        qdrant::ensure_collection_exists(&qdrant_client).await?;
         Ok(Self {
             qdrant_client,
             genai_client,

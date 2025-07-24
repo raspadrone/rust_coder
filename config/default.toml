@@ -1,1 +1,2 @@
 qdrant_url = "http://localhost:6334"
+llm_model = ""
