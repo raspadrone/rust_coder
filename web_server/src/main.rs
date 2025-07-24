@@ -1,3 +1,6 @@
+#![allow(unused)]
+use std::env;
+
 use anyhow::{Context, Result, anyhow};
 use app_core::{AppSettings, AppState, process_query};
 use axum::{
@@ -7,6 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 
 /*-------------------------------------- models -----------------------------------------*/
@@ -48,10 +52,21 @@ where
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv().ok();
+    let gemini_key = env::var("GEMINI_API_KEY").expect("`.env` must contain GEMINI_API_KEY");
+    // OPENAI KEY
+    let openai_key = env::var("OPENAI_API_KEY").expect("`.env` must contain OPENAI_API_KEY");
+    // gemini model
+    let gemini_model = env::var("GEMINI_MODEL").unwrap_or_else(|_| "gemini-2.5-flash".to_owned());
+    // openai model
+    let openai_model = env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt.4o-mini".to_owned());
+
     let settings = AppSettings::new().map_err(|e| anyhow!("Failed to load settings.Error: {e}"))?;
-    let app_state = AppState::new(settings)
+    let mut app_state = AppState::new(settings)
         .await
         .context("Failed to initialize app state.")?;
+    /**********************choose model ***********/
+    app_state.model = gemini_model;
     let app = Router::new()
         // `GET /` goes to a simple handler
         .route("/", get(root_handler))
@@ -85,5 +100,3 @@ async fn api_query_handler(
     };
     Ok(Json(response))
 }
-
-

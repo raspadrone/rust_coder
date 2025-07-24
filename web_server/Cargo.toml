@@ -9,3 +9,4 @@ tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
 app_core = { path = "../app_core" }
+dotenv = "0.15.0"
