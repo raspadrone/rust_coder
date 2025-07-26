@@ -2,7 +2,7 @@
 use std::env;
 
 use anyhow::{Context, Result, anyhow};
-use app_core::{AppSettings, AppState, process_query};
+use app_core::{AppSettings, AppState, ingestion::ingest_document, process_query};
 use axum::{
     Json, Router,
     extract::State,
@@ -52,6 +52,12 @@ where
         Self(err.into())
     }
 }
+
+#[derive(Deserialize)]
+struct IngestRequest {
+    content: String,
+}
+
 /*-------------------------------------- main -----------------------------------------*/
 
 #[tokio::main]
@@ -84,6 +90,7 @@ async fn main() -> Result<()> {
         .route("/api/query", post(api_query_handler))
         // curl --request POST http://127.0.0.1:3000/api/shutdown to stop qdrant
         .route("/api/shutdown", post(api_shutdown_handler))
+        .route("/api/ingest", post(api_ingest_handler))
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
@@ -113,12 +120,23 @@ async fn api_query_handler(
     Ok(Json(response))
 }
 
-/// Handler for stopping and removing the Qdrant container.
+/// Handler for stopping and removing the Qdrant container
 async fn api_shutdown_handler() -> Result<StatusCode, AppError> {
     dotenv().ok();
     let docker_host = env::var("DOCKER_HOST").expect("`.env` must contain DOCKER_HOST");
     stop_and_remove_qdrant(docker_host)
         .await
         .context("Failed to stop and remove Qdrant container")?;
+    Ok(StatusCode::OK)
+}
+
+/// Handler for ingesting a new document into the knowledge base
+async fn api_ingest_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<IngestRequest>,
+) -> Result<StatusCode, AppError> {
+    // We pass a clone of the state because the ingest_document function
+    // takes ownership of it.
+    ingest_document(state.clone(), payload.content).await?;
     Ok(StatusCode::OK)
 }
