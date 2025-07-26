@@ -1,8 +1,10 @@
 use anyhow::Result;
 use qdrant_client::{
-    qdrant::{vectors_config::Config, CreateCollection, Distance, VectorParams, VectorsConfig},
+    qdrant::{vectors_config::Config, CreateCollection, Distance, SearchPoints, VectorParams, VectorsConfig},
     Qdrant,
 };
+
+use crate::AppState;
 
 pub const KNOWLEDGE_BASE_COLLECTION: &str = "knowledge_base";
 
@@ -30,4 +32,29 @@ pub async fn ensure_collection_exists(client: &Qdrant) -> Result<()> {
             .await?;
     }
     Ok(())
+}
+
+/// Searches the knowledge base for relevant context.
+pub async fn search_knowledge_base(state: &AppState, query: &str) -> Result<String> {
+    let query_embedding = state.embedding_model.embed(vec![query.to_string()], None)?[0].clone();
+
+    let search_response = state
+        .qdrant_client
+        .search_points(SearchPoints {
+            collection_name: KNOWLEDGE_BASE_COLLECTION.to_string(),
+            vector: query_embedding,
+            limit: 3, // Find the top 3 most similar chunks
+            with_payload: Some(true.into()),
+            ..Default::default()
+        })
+        .await?;
+
+    let context = search_response
+        .result
+        .into_iter()
+        .filter_map(|point| point.payload.get("chunk")?.as_str().map(String::from))
+        .collect::<Vec<String>>()
+        .join("\n---\n");
+
+    Ok(context)
 }
