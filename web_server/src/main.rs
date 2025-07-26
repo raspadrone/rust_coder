@@ -54,6 +54,10 @@ where
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // qdrant start
+    docker_manager::ensure_qdrant_running()
+        .await
+        .context("Failed to ensure Qdrant container is running")?;
     dotenv().ok();
     let gemini_key = env::var("GEMINI_API_KEY").expect("`.env` must contain GEMINI_API_KEY");
     // OPENAI KEY
