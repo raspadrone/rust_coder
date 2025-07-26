@@ -13,6 +13,8 @@ use axum::{
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 
+use crate::docker_manager::stop_and_remove_qdrant;
+
 pub mod docker_manager;
 
 /*-------------------------------------- models -----------------------------------------*/
@@ -54,11 +56,12 @@ where
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv().ok();
+    let docker_host = env::var("DOCKER_HOST").expect("`.env` must contain DOCKER_HOST");
     // qdrant start
-    docker_manager::ensure_qdrant_running()
+    docker_manager::ensure_qdrant_running(docker_host)
         .await
         .context("Failed to ensure Qdrant container is running")?;
-    dotenv().ok();
     let gemini_key = env::var("GEMINI_API_KEY").expect("`.env` must contain GEMINI_API_KEY");
     // OPENAI KEY
     let openai_key = env::var("OPENAI_API_KEY").expect("`.env` must contain OPENAI_API_KEY");
@@ -73,11 +76,14 @@ async fn main() -> Result<()> {
         .context("Failed to initialize app state.")?;
     /**********************choose model ***********/
     app_state.model = gemini_model;
+
     let app = Router::new()
         // `GET /` goes to a simple handler
         .route("/", get(root_handler))
         // `POST /api/query` goes to our new handler
         .route("/api/query", post(api_query_handler))
+        // curl --request POST http://127.0.0.1:3000/api/shutdown to stop qdrant
+        .route("/api/shutdown", post(api_shutdown_handler))
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
@@ -105,4 +111,12 @@ async fn api_query_handler(
         response: format!("Received your query: '{}'", response_string),
     };
     Ok(Json(response))
+}
+
+/// Handler for stopping and removing the Qdrant container.
+async fn api_shutdown_handler() -> Result<StatusCode, AppError> {
+    stop_and_remove_qdrant()
+        .await
+        .context("Failed to stop and remove Qdrant container")?;
+    Ok(StatusCode::OK)
 }
