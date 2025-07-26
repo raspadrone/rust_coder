@@ -117,22 +117,35 @@ async fn find_container(
     }))
 }
 
-/// stop qdrant and remove if so intended
-pub async fn stop_and_remove_qdrant() -> Result<()> {
-    let docker = Docker::connect_with_http_defaults()?;
+pub async fn stop_and_remove_qdrant(host: String) -> Result<()> {
+    let docker = Docker::connect_with_socket(&host, 120, bollard::API_DEFAULT_VERSION)?;
 
     if find_container(&docker, CONTAINER_NAME).await?.is_some() {
         println!("INFO: Stopping container '{}'...", CONTAINER_NAME);
+
+        // Create options to wait up to 10 seconds for a graceful shutdown.
+        let options = Some(StopContainerOptions {
+            signal: Some("SIGTERM".to_string()), // Specify the signal to send
+            t: Some(10),                         // Optional timeout in seconds
+        });
+
         docker
-            .stop_container(CONTAINER_NAME, None::<StopContainerOptions>)
+            .stop_container(CONTAINER_NAME, options)
             .await
             .context("Failed to stop Qdrant container")?;
-        println!("INFO: Container stopped.");
-        // docker
-        //     .remove_container(CONTAINER_NAME, None::<RemoveContainerOptions>)
-        //     .await
-        //     .context("Failed to remove Qdrant container")?;
-        // println!("INFO: Container removed successfully.");
+
+        println!("INFO: Container stopped successfully.");
+
+        // The container is now stopped. Uncomment the following lines
+        // if you want to also remove it entirely.
+        /*
+        println!("INFO: Removing container...");
+        docker
+            .remove_container(CONTAINER_NAME, None::<RemoveContainerOptions>)
+            .await
+            .context("Failed to remove Qdrant container")?;
+        println!("INFO: Container removed successfully.");
+        */
     } else {
         println!("INFO: Qdrant container not found, nothing to do.");
     }

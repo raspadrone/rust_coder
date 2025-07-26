@@ -115,7 +115,9 @@ async fn api_query_handler(
 
 /// Handler for stopping and removing the Qdrant container.
 async fn api_shutdown_handler() -> Result<StatusCode, AppError> {
-    stop_and_remove_qdrant()
+    dotenv().ok();
+    let docker_host = env::var("DOCKER_HOST").expect("`.env` must contain DOCKER_HOST");
+    stop_and_remove_qdrant(docker_host)
         .await
         .context("Failed to stop and remove Qdrant container")?;
     Ok(StatusCode::OK)
