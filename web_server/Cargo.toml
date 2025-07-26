@@ -10,3 +10,5 @@ serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
 app_core = { path = "../app_core" }
 dotenv = "0.15.0"
+bollard = "0.19.1"
+futures-util = "0.3.31"

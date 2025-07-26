@@ -13,6 +13,8 @@ use axum::{
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 
+pub mod docker_manager;
+
 /*-------------------------------------- models -----------------------------------------*/
 
 #[derive(Deserialize)]
