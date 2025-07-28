@@ -13,6 +13,7 @@ pub mod llm;
 pub mod sandbox;
 pub mod qdrant;
 pub mod ingestion;
+pub mod feedback;
 
 
 #[derive(Deserialize, Clone)]
