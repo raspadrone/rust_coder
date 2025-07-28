@@ -2,7 +2,7 @@
 use std::env;
 
 use anyhow::{Context, Result, anyhow};
-use app_core::{AppSettings, AppState, ingestion::ingest_document, process_query};
+use app_core::{feedback::process_upvoted_solution, ingestion::ingest_document, process_query, AppSettings, AppState};
 use axum::{
     Json, Router,
     extract::State,
@@ -58,6 +58,13 @@ struct IngestRequest {
     content: String,
 }
 
+#[derive(Deserialize)]
+struct FeedbackRequest {
+    query: String,
+    code: String,
+    upvoted: bool,
+}
+
 /*-------------------------------------- main -----------------------------------------*/
 
 #[tokio::main]
@@ -91,6 +98,7 @@ async fn main() -> Result<()> {
         // curl --request POST http://127.0.0.1:3000/api/shutdown to stop qdrant
         .route("/api/shutdown", post(api_shutdown_handler))
         .route("/api/ingest", post(api_ingest_handler))
+        .route("/api/feedback", post(api_feedback_handler))
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
@@ -138,5 +146,18 @@ async fn api_ingest_handler(
     // We pass a clone of the state because the ingest_document function
     // takes ownership of it.
     ingest_document(state.clone(), payload.content).await?;
+    Ok(StatusCode::OK)
+}
+
+/// Handler for receiving feedback on a generated solution.
+async fn api_feedback_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<FeedbackRequest>,
+) -> Result<StatusCode, AppError> {
+    if payload.upvoted {
+        // Pass a reference to the state
+        process_upvoted_solution(&state, payload.query, payload.code).await?;
+    }
+    // For now, we do nothing on a downvote
     Ok(StatusCode::OK)
 }
