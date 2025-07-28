@@ -20,7 +20,7 @@ fn extract_rust_code(content: &str) -> String {
 
 
 /// Generates code using the genai crate.
-pub async fn generate_code(state: &AppState, query: &str) -> Result<String> {
+pub async fn generate_code(state: &AppState, query: &str, _context: &String) -> Result<String> {
     let system_prompt = "You are a Rust programming assistant. Your response must only be a single, valid Rust code block enclosed in ```rust. Do not include any other explanations or text. The code should be a complete, runnable program.";
 
     let request = ChatRequest::new(vec![ChatMessage::user(system_prompt),ChatMessage::user(query)]);

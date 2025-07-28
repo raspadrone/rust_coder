@@ -62,7 +62,12 @@ impl AppState {
 
 /// The core query processing logic.
 pub async fn process_query(query: &str, state: &AppState) -> Result<String> {
-    let generated_code = generate_code(&state, query).await?;
+    // Search for relevant context in BOTH knowledge bases
+    let context = qdrant::search_for_context(state, query).await?;
+
+    // Generate code from the LLM, now with added context
+    let generated_code = generate_code(state, query, &context).await?;
+    // let generated_code = generate_code(&state, query).await?;
 
     if generated_code.is_empty() {
         return Ok("LLM failed to return a valid code block.".to_string());
