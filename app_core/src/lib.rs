@@ -50,7 +50,7 @@ impl AppState {
         // Initialize the embedding model
         let embedding_model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::AllMiniLML6V2))?;
         // initialize qdrant collection if !exists
-        qdrant::ensure_collection_exists(&qdrant_client).await?;
+        qdrant::ensure_collections_exist(&qdrant_client).await?;
         Ok(Self {
             qdrant_client,
             genai_client,
@@ -62,27 +62,24 @@ impl AppState {
 
 /// The core query processing logic.
 pub async fn process_query(query: &str, state: &AppState) -> Result<String> {
-    // Search for relevant context in BOTH knowledge bases
     let context = qdrant::search_for_context(state, query).await?;
-
-    // Generate code from the LLM, now with added context
     let generated_code = generate_code(state, query, &context).await?;
-    // let generated_code = generate_code(&state, query).await?;
 
     if generated_code.is_empty() {
         return Ok("LLM failed to return a valid code block.".to_string());
     }
     let sandbox_result = run_in_sandbox(&generated_code).await?;
 
+    // Corrected response formatting
     let response = if sandbox_result.success {
         format!(
-            "Sandbox test for query '{}' succeeded! Output:\n---\n{}",
-            query, sandbox_result.output
+            "OK. AI-generated code compiled successfully.\n---\n{}",
+            generated_code
         )
     } else {
         format!(
-            "Sandbox test for query '{}' failed! Compiler errors:\n---\n{}",
-            query, sandbox_result.output
+            "FAIL. AI-generated code failed to compile.\n---\nErrors:\n{}",
+            sandbox_result.output
         )
     };
 

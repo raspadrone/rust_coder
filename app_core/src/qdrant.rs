@@ -1,7 +1,10 @@
 use anyhow::Result;
 use qdrant_client::{
-    qdrant::{vectors_config::Config, CreateCollection, Distance, SearchPoints, VectorParams, VectorsConfig},
     Qdrant,
+    qdrant::{
+        CreateCollection, Distance, SearchPoints, VectorParams, VectorsConfig,
+        vectors_config::Config,
+    },
 };
 
 use crate::AppState;
@@ -10,27 +13,25 @@ pub const KNOWLEDGE_BASE_COLLECTION: &str = "knowledge_base";
 pub const APPROVED_SOLUTIONS_COLLECTION: &str = "approved_solutions";
 
 /// Creates the primary collection for storing knowledge base vectors if it doesn't exist.
-pub async fn ensure_collection_exists(client: &Qdrant) -> Result<()> {
-    let collections = client.list_collections().await?;
-    let collection_exists = collections
-        .collections
-        .into_iter()
-        .any(|c| c.name == KNOWLEDGE_BASE_COLLECTION);
-
-    if !collection_exists {
-        client
-            .create_collection(CreateCollection {
-                collection_name: KNOWLEDGE_BASE_COLLECTION.to_string(),
-                vectors_config: Some(VectorsConfig {
-                    config: Some(Config::Params(VectorParams {
-                        size: 768, // Gemini models use 768-dimensional embeddings
-                        distance: Distance::Cosine.into(),
-                        ..Default::default()
-                    })),
-                }),
-                ..Default::default()
-            })
-            .await?;
+pub async fn ensure_collections_exist(client: &Qdrant) -> Result<()> {
+    let collections_to_ensure = vec![KNOWLEDGE_BASE_COLLECTION, APPROVED_SOLUTIONS_COLLECTION];
+    for collection_name in collections_to_ensure {
+        if client.collection_info(collection_name).await.is_err() {
+            client
+                .create_collection(CreateCollection {
+                    collection_name: collection_name.to_string(),
+                    vectors_config: Some(VectorsConfig {
+                        config: Some(Config::Params(VectorParams {
+                            size: 384, // AllMiniLML6V2 uses 384-dimensional embeddings
+                            distance: Distance::Cosine.into(),
+                            ..Default::default()
+                        })),
+                    }),
+                    ..Default::default()
+                })
+                .await?;
+            println!("INFO: Created Qdrant collection '{}'", collection_name);
+        }
     }
     Ok(())
 }
@@ -106,7 +107,10 @@ pub async fn search_for_context(state: &AppState, query: &str) -> Result<String>
             .filter_map(|point| {
                 let code = point.payload.get("code")?.as_str()?;
                 let original_query = point.payload.get("query")?.as_str()?;
-                Some(format!("Previously approved solution for a similar query ('{}'):\n```rust\n{}\n```", original_query, code))
+                Some(format!(
+                    "Previously approved solution for a similar query ('{}'):\n```rust\n{}\n```",
+                    original_query, code
+                ))
             })
             .collect::<Vec<String>>()
             .join("\n---\n");
