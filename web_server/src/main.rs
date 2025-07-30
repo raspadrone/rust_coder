@@ -2,7 +2,10 @@
 use std::env;
 
 use anyhow::{Context, Result, anyhow};
-use app_core::{feedback::process_upvoted_solution, ingestion::ingest_document, process_query, AppSettings, AppState};
+use app_core::{
+    AppSettings, AppState, feedback::process_upvoted_solution, ingestion::ingest_document,
+    process_query,
+};
 use axum::{
     Json, Router,
     extract::State,
@@ -60,6 +63,12 @@ struct IngestRequest {
     content: String,
 }
 
+// This struct is for the pasted text endpoint
+#[derive(Deserialize)]
+struct IngestTextRequest {
+    content: String,
+}
+
 #[derive(Deserialize)]
 struct FeedbackRequest {
     query: String,
@@ -105,7 +114,8 @@ async fn main() -> Result<()> {
         .route("/api/query", post(api_query_handler))
         // curl --request POST http://127.0.0.1:3000/api/shutdown to stop qdrant
         .route("/api/shutdown", post(api_shutdown_handler))
-        .route("/api/ingest", post(api_ingest_handler))
+        .route("/api/ingest/file", post(api_ingest_file_handler))
+        .route("/api/ingest/text", post(api_ingest_text_handler))
         .route("/api/feedback", post(api_feedback_handler))
         .layer(cors)
         .with_state(app_state);
@@ -171,8 +181,8 @@ async fn api_feedback_handler(
     Ok(StatusCode::OK)
 }
 
-/// Handler for ingesting a new document from a file upload.
-async fn api_ingest_handler(
+/// Handler for ingesting from a file upload.
+async fn api_ingest_file_handler(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<StatusCode, AppError> {
@@ -190,10 +200,21 @@ async fn api_ingest_handler(
     }
 
     if document_content.is_empty() {
-        return Err(AppError(anyhow::anyhow!("'document' field not found in multipart upload.")));
+        return Err(AppError(anyhow::anyhow!(
+            "'document' field not found in multipart upload."
+        )));
     }
-    
+
     // Pass the extracted text content to our core ingestion logic.
     ingest_document(state.clone(), document_content).await?;
+    Ok(StatusCode::OK)
+}
+
+/// Handler for ingesting from a raw text payload.
+async fn api_ingest_text_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<IngestTextRequest>,
+) -> Result<StatusCode, AppError> {
+    ingest_document(state.clone(), payload.content).await?;
     Ok(StatusCode::OK)
 }
