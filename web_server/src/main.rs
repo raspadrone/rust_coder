@@ -188,20 +188,26 @@ async fn api_ingest_file_handler(
 ) -> Result<StatusCode, AppError> {
     let mut document_content = String::new();
 
-    // The multipart object contains different "fields" or parts of the upload.
-    // We need to loop through them to find the one that contains our file.
     while let Some(field) = multipart.next_field().await? {
-        // We'll assume the frontend sends the file under the field name "document".
         if field.name() == Some("document") {
-            // Read the entire contents of the field into a string.
-            document_content = field.text().await?;
-            break; // Exit the loop once we've found our file.
+            let content_type = field.content_type().unwrap_or("text/plain").to_string();
+            
+            // Check if the uploaded file is a PDF
+            if content_type == "application/pdf" {
+                // If it is, get the raw bytes and use pdf-extract to get the text
+                let bytes = field.bytes().await?;
+                document_content = pdf_extract::extract_text_from_mem(&bytes)?;
+            } else {
+                // Otherwise, treat it as plain text
+                document_content = field.text().await?;
+            }
+            break; // Exit the loop once we've processed the file
         }
     }
 
     if document_content.is_empty() {
         return Err(AppError(anyhow::anyhow!(
-            "'document' field not found in multipart upload."
+            "'document' field not found or content could not be extracted."
         )));
     }
 
