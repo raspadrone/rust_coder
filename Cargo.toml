@@ -12,4 +12,4 @@ serde = "1.0.219"
 anyhow = "1.0.98"
 genai = "0.3.5"
 text-splitter = "0.27.0"
-reqwest = { version = "0.12.22", features = ["json"] }
+reqwest = { version = "0.11.27", features = ["json"] }
