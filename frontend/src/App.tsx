@@ -1,35 +1,52 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from 'react';
+import axios from 'axios';
+import './App.css';
+
+const API_BASE_URL = 'http://127.0.0.1:3000';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [ingestContent, setIngestContent] = useState('');
+  const [ingestStatus, setIngestStatus] = useState('');
+
+  const handleIngest = async () => {
+    if (!ingestContent.trim()) {
+      setIngestStatus('Content cannot be empty.');
+      return;
+    }
+    setIngestStatus('Ingesting...');
+    try {
+      await axios.post(`${API_BASE_URL}/api/ingest`, {
+        content: ingestContent,
+      });
+      setIngestStatus('Successfully ingested document!');
+      setIngestContent(''); // Clear the textarea on success
+    } catch (error) {
+      console.error('Ingestion error:', error);
+      setIngestStatus('Failed to ingest document.');
+    }
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className="App">
+      <header className="App-header">
+        <h1>Rust Coder AI</h1>
+      </header>
+      <main>
+        <div className="card">
+          <h2>Ingest Knowledge</h2>
+          <p>Add a document to the AI's knowledge base.</p>
+          <textarea
+            value={ingestContent}
+            onChange={(e) => setIngestContent(e.target.value)}
+            placeholder="Paste document content here..."
+            rows={10}
+          />
+          <button onClick={handleIngest}>Ingest Document</button>
+          {ingestStatus && <p className="status">{ingestStatus}</p>}
+        </div>
+      </main>
+    </div>
+  );
 }
 
-export default App
+export default App;
