@@ -12,6 +12,7 @@ use axum::{
 };
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::docker_manager::stop_and_remove_qdrant;
 
@@ -90,6 +91,12 @@ async fn main() -> Result<()> {
     /**********************choose model ***********/
     app_state.model = gemini_model;
 
+    // Configure a permissive CORS policy for development
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         // `GET /` goes to a simple handler
         .route("/", get(root_handler))
@@ -99,6 +106,7 @@ async fn main() -> Result<()> {
         .route("/api/shutdown", post(api_shutdown_handler))
         .route("/api/ingest", post(api_ingest_handler))
         .route("/api/feedback", post(api_feedback_handler))
+        .layer(cors)
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;

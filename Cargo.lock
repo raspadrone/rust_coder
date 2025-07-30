@@ -4186,6 +4186,7 @@ dependencies = [
  "futures-util",
  "serde",
  "tokio",
+ "tower-http",
 ]
 
 [[package]]
