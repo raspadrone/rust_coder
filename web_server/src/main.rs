@@ -10,6 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use axum_extra::extract::Multipart;
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
@@ -146,16 +147,16 @@ async fn api_shutdown_handler() -> Result<StatusCode, AppError> {
     Ok(StatusCode::OK)
 }
 
-/// Handler for ingesting a new document into the knowledge base
-async fn api_ingest_handler(
-    State(state): State<AppState>,
-    Json(payload): Json<IngestRequest>,
-) -> Result<StatusCode, AppError> {
-    // We pass a clone of the state because the ingest_document function
-    // takes ownership of it.
-    ingest_document(state.clone(), payload.content).await?;
-    Ok(StatusCode::OK)
-}
+// /// Handler for ingesting a new document into the knowledge base
+// async fn api_ingest_handler(
+//     State(state): State<AppState>,
+//     Json(payload): Json<IngestRequest>,
+// ) -> Result<StatusCode, AppError> {
+//     // We pass a clone of the state because the ingest_document function
+//     // takes ownership of it.
+//     ingest_document(state.clone(), payload.content).await?;
+//     Ok(StatusCode::OK)
+// }
 
 /// Handler for receiving feedback on a generated solution.
 async fn api_feedback_handler(
@@ -167,5 +168,32 @@ async fn api_feedback_handler(
         process_upvoted_solution(&state, payload.query, payload.code).await?;
     }
     // For now, we do nothing on a downvote
+    Ok(StatusCode::OK)
+}
+
+/// Handler for ingesting a new document from a file upload.
+async fn api_ingest_handler(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> Result<StatusCode, AppError> {
+    let mut document_content = String::new();
+
+    // The multipart object contains different "fields" or parts of the upload.
+    // We need to loop through them to find the one that contains our file.
+    while let Some(field) = multipart.next_field().await? {
+        // We'll assume the frontend sends the file under the field name "document".
+        if field.name() == Some("document") {
+            // Read the entire contents of the field into a string.
+            document_content = field.text().await?;
+            break; // Exit the loop once we've found our file.
+        }
+    }
+
+    if document_content.is_empty() {
+        return Err(AppError(anyhow::anyhow!("'document' field not found in multipart upload.")));
+    }
+    
+    // Pass the extracted text content to our core ingestion logic.
+    ingest_document(state.clone(), document_content).await?;
     Ok(StatusCode::OK)
 }
