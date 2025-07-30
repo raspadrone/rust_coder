@@ -1,28 +1,66 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 import './App.css';
 
 const API_BASE_URL = 'http://127.0.0.1:3000';
 
 function App() {
-  const [ingestContent, setIngestContent] = useState('');
-  const [ingestStatus, setIngestStatus] = useState('');
+  // State for text ingestion
+  const [textContent, setTextContent] = useState('');
+  const [textStatus, setTextStatus] = useState('');
 
-  const handleIngest = async () => {
-    if (!ingestContent.trim()) {
-      setIngestStatus('Content cannot be empty.');
+  // State for file ingestion
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileStatus, setFileStatus] = useState('');
+
+  // Handler for pasted text
+  const handleTextIngest = async () => {
+    if (!textContent.trim()) {
+      setTextStatus('Content cannot be empty.');
       return;
     }
-    setIngestStatus('Ingesting...');
+    setTextStatus('Ingesting text...');
     try {
-      await axios.post(`${API_BASE_URL}/api/ingest`, {
-        content: ingestContent,
+      await axios.post(`${API_BASE_URL}/api/ingest/text`, {
+        content: textContent,
       });
-      setIngestStatus('Successfully ingested document!');
-      setIngestContent(''); // Clear the textarea on success
+      setTextStatus('Successfully ingested text!');
+      setTextContent(''); // Clear on success
     } catch (error) {
-      console.error('Ingestion error:', error);
-      setIngestStatus('Failed to ingest document.');
+      console.error('Text ingestion error:', error);
+      setTextStatus('Failed to ingest text.');
+    }
+  };
+
+  // Handler for file upload
+  const handleFileIngest = async () => {
+    if (!selectedFile) {
+      setFileStatus('Please select a file first.');
+      return;
+    }
+    setFileStatus(`Ingesting file: ${selectedFile.name}...`);
+    
+    // Use FormData for file uploads
+    const formData = new FormData();
+    formData.append('document', selectedFile);
+
+    try {
+      await axios.post(`${API_BASE_URL}/api/ingest/file`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setFileStatus('Successfully ingested file!');
+      setSelectedFile(null); // Clear on success
+    } catch (error) {
+      console.error('File ingestion error:', error);
+      setFileStatus('Failed to ingest file.');
+    }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      setSelectedFile(event.target.files[0]);
     }
   };
 
@@ -31,18 +69,25 @@ function App() {
       <header className="App-header">
         <h1>Rust Coder AI</h1>
       </header>
-      <main>
+      <main className="ingest-container">
         <div className="card">
-          <h2>Ingest Knowledge</h2>
-          <p>Add a document to the AI's knowledge base.</p>
+          <h2>Ingest by Pasting Text</h2>
           <textarea
-            value={ingestContent}
-            onChange={(e) => setIngestContent(e.target.value)}
+            value={textContent}
+            onChange={(e) => setTextContent(e.target.value)}
             placeholder="Paste document content here..."
             rows={10}
           />
-          <button onClick={handleIngest}>Ingest Document</button>
-          {ingestStatus && <p className="status">{ingestStatus}</p>}
+          <button onClick={handleTextIngest}>Ingest Text</button>
+          {textStatus && <p className="status">{textStatus}</p>}
+        </div>
+        <div className="card">
+          <h2>Ingest by Attaching File</h2>
+          <input type="file" onChange={handleFileChange} />
+          <button onClick={handleFileIngest} disabled={!selectedFile}>
+            Ingest File
+          </button>
+          {fileStatus && <p className="status">{fileStatus}</p>}
         </div>
       </main>
     </div>
