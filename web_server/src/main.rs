@@ -71,12 +71,16 @@ struct IngestTextRequest {
     content: String,
 }
 
+
+
 #[derive(Deserialize)]
 struct FeedbackRequest {
     query: String,
     code: String,
     upvoted: bool,
 }
+
+
 
 /*-------------------------------------- main -----------------------------------------*/
 

@@ -16,6 +16,7 @@ pub mod qdrant;
 pub mod ingestion;
 pub mod feedback;
 pub mod web_search;
+pub mod web_scraper;
 
 
 #[derive(Deserialize, Clone)]
