@@ -188,26 +188,36 @@ async fn api_ingest_file_handler(
 ) -> Result<StatusCode, AppError> {
     let mut document_content = String::new();
 
-    while let Some(field) = multipart.next_field().await? {
+    // Explicitly handle multipart errors to provide a better response than a generic 500.
+    while let Some(field) = multipart.next_field().await.map_err(|err| {
+        AppError(anyhow::anyhow!("Error reading multipart form data: {}", err))
+    })? {
+        // Look for the specific field named "document".
         if field.name() == Some("document") {
             let content_type = field.content_type().unwrap_or("text/plain").to_string();
             
-            // Check if the uploaded file is a PDF
+            // Read the raw bytes of the field first.
+            let bytes = field.bytes().await.map_err(|err| {
+                AppError(anyhow::anyhow!("Failed to read bytes from file field: {}", err))
+            })?;
+
+            // Now, process the bytes based on the content type.
             if content_type == "application/pdf" {
-                // If it is, get the raw bytes and use pdf-extract to get the text
-                let bytes = field.bytes().await?;
-                document_content = pdf_extract::extract_text_from_mem(&bytes)?;
+                document_content = pdf_extract::extract_text_from_mem(&bytes)
+                    .map_err(|err| AppError(anyhow::anyhow!("Failed to extract text from PDF. The file may be corrupt or not a valid PDF. Error: {}", err)))?;
             } else {
-                // Otherwise, treat it as plain text
-                document_content = field.text().await?;
+                // Safely convert bytes to a String, handling potential non-UTF8 content.
+                document_content = String::from_utf8(bytes.to_vec())
+                    .map_err(|err| AppError(anyhow::anyhow!("File content is not valid UTF-8 text: {}", err)))?;
             }
-            break; // Exit the loop once we've processed the file
+            // Once we've found and processed the 'document' field, we can stop looking.
+            break;
         }
     }
 
     if document_content.is_empty() {
         return Err(AppError(anyhow::anyhow!(
-            "'document' field not found or content could not be extracted."
+            "The 'document' field was not found in the request or the extracted content was empty."
         )));
     }
 
