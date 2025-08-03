@@ -3,8 +3,7 @@ use std::env;
 
 use anyhow::{Context, Result, anyhow};
 use app_core::{
-    AppSettings, AppState, feedback::process_upvoted_solution, ingestion::ingest_document,
-    process_query,
+    feedback::process_upvoted_solution, ingestion::ingest_document, process_query, web_scraper::scrape_website, AppSettings, AppState
 };
 use axum::{
     Json, Router,
@@ -71,7 +70,10 @@ struct IngestTextRequest {
     content: String,
 }
 
-
+#[derive(Deserialize)]
+struct IngestUrlRequest {
+    url: String,
+}
 
 #[derive(Deserialize)]
 struct FeedbackRequest {
@@ -123,6 +125,7 @@ async fn main() -> Result<()> {
         .route("/api/ingest/file", post(api_ingest_file_handler))
         .route("/api/ingest/text", post(api_ingest_text_handler))
         .route("/api/feedback", post(api_feedback_handler))
+        .route("/api/ingest/url", post(api_ingest_url_handler))
         .with_state(app_state)
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // axum allows 50 MB in bytes uploads;
         .layer(cors)
@@ -306,5 +309,20 @@ async fn api_ingest_text_handler(
     Json(payload): Json<IngestTextRequest>,
 ) -> Result<StatusCode, AppError> {
     ingest_document(state.clone(), payload.content).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn api_ingest_url_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<IngestUrlRequest>,
+) -> Result<StatusCode, AppError> {
+    println!("Received request to ingest URL: {}", payload.url);
+    
+    // Scrape all text content from the website
+    let document_content = scrape_website(&payload.url).await?;
+
+    // Use the existing ingestion logic to process the scraped content
+    ingest_document(state.clone(), document_content).await?;
+    
     Ok(StatusCode::OK)
 }
