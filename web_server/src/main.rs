@@ -7,14 +7,20 @@ use app_core::{
     process_query,
 };
 use axum::{
-    extract::{DefaultBodyLimit, State}, http::StatusCode, response::{IntoResponse, Response}, routing::{get, post}, Json, Router
+    Json, Router,
+    extract::{DefaultBodyLimit, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::{get, post},
 };
 use axum_extra::extract::Multipart;
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
 
 use crate::docker_manager::stop_and_remove_qdrant;
+
 
 pub mod docker_manager;
 
@@ -113,9 +119,10 @@ async fn main() -> Result<()> {
         .route("/api/ingest/file", post(api_ingest_file_handler))
         .route("/api/ingest/text", post(api_ingest_text_handler))
         .route("/api/feedback", post(api_feedback_handler))
-        .layer(cors)
         .with_state(app_state)
-        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)); // axum allows 50 MB in bytes uploads;
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // axum allows 50 MB in bytes uploads;
+        .layer(cors)
+        .layer(TraceLayer::new_for_http());;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     println!("listening on {}", listener.local_addr()?);
@@ -187,15 +194,21 @@ async fn api_ingest_file_handler(
 
     // Explicitly handle multipart errors to provide a better response than a generic 500.
     while let Some(field) = multipart.next_field().await.map_err(|err| {
-        AppError(anyhow::anyhow!("Error reading multipart form data: {}", err))
+        AppError(anyhow::anyhow!(
+            "Error reading multipart form data: {}",
+            err
+        ))
     })? {
         // Look for the specific field named "document".
         if field.name() == Some("document") {
             let content_type = field.content_type().unwrap_or("text/plain").to_string();
-            
+
             // Read the raw bytes of the field first.
             let bytes = field.bytes().await.map_err(|err| {
-                AppError(anyhow::anyhow!("Failed to read bytes from file field: {}", err))
+                AppError(anyhow::anyhow!(
+                    "Failed to read bytes from file field: {}",
+                    err
+                ))
             })?;
 
             // Now, process the bytes based on the content type.
@@ -204,8 +217,12 @@ async fn api_ingest_file_handler(
                     .map_err(|err| AppError(anyhow::anyhow!("Failed to extract text from PDF. The file may be corrupt or not a valid PDF. Error: {}", err)))?;
             } else {
                 // Safely convert bytes to a String, handling potential non-UTF8 content.
-                document_content = String::from_utf8(bytes.to_vec())
-                    .map_err(|err| AppError(anyhow::anyhow!("File content is not valid UTF-8 text: {}", err)))?;
+                document_content = String::from_utf8(bytes.to_vec()).map_err(|err| {
+                    AppError(anyhow::anyhow!(
+                        "File content is not valid UTF-8 text: {}",
+                        err
+                    ))
+                })?;
             }
             // Once we've found and processed the 'document' field, we can stop looking.
             break;
@@ -222,7 +239,6 @@ async fn api_ingest_file_handler(
     ingest_document(state.clone(), document_content).await?;
     Ok(StatusCode::OK)
 }
-
 
 // New handler with extensive logging for debugging
 
@@ -244,19 +260,19 @@ async fn api_ingest_file_handler(
 //                 println!("[DEBUG] ERROR: {}", msg);
 //                 return Err(AppError(anyhow::anyhow!(msg)));
 //             }
-            
+
 //             println!("[DEBUG] Field is 'document'. Proceeding to read bytes...");
 
 //             // Try to read the bytes from the field
 //             match field.bytes().await {
 //                 Ok(data) => {
 //                     println!("[DEBUG] Successfully read {} bytes from the field.", data.len());
-                    
+
 //                     // --- Your original logic would go here ---
 //                     // For now, we just return success.
 //                     // let document_content = pdf_extract::extract_text_from_mem(&data)?;
 //                     // ... etc ...
-                    
+
 //                     println!("[DEBUG] --- Handler finished successfully ---");
 //                     Ok(StatusCode::OK)
 //                 }

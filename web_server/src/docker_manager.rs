@@ -8,7 +8,7 @@ use bollard::{
     },
 };
 use futures_util::stream::StreamExt;
-use std::collections::HashMap;
+use std::{collections::HashMap, env};
 use std::default::Default;
 
 const QDRANT_IMAGE: &str = "qdrant/qdrant:latest";
@@ -76,14 +76,27 @@ async fn create_and_start_qdrant(docker: &Docker) -> Result<()> {
         }]),
     );
 
-    // This is the key change: create a HostConfig with the port bindings.
+
+    // 1. Get the current directory where the app is running.
+    let current_dir = env::current_dir().context("Failed to get current directory")?;
+
+    // 2. Create the full, absolute path for our storage folder.
+    let host_storage_path = current_dir.join("qdrant_storage");
+
+    // 3. Format the bind mount string with the absolute path.
+    let bind_mount = format!(
+        "{}:/qdrant/storage",
+        host_storage_path
+            .to_str()
+            .context("Storage path is not valid UTF-8")?
+    );
     let host_config = HostConfig {
         port_bindings: Some(port_bindings),
+        binds: Some(vec![bind_mount]),
         ..Default::default()
     };
 
     // Create the final container configuration for Qdrant.
-    // This replaces the incorrect `alpine_config` from your previous version.
     let qdrant_config = ContainerCreateBody {
         image: Some(QDRANT_IMAGE.to_string()),
         host_config: Some(host_config),

@@ -2,7 +2,7 @@
 
 # Ignore compiled artifacts and build outputs
 **/target/
-
+**/qdrant_storage/
 # Ignore the lock file. In an application, we commit this,
 # but for our learning process, we'll keep it flexible.
 # For a final product, you would remove this line.
