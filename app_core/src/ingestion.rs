@@ -1,114 +1,78 @@
-// use crate::{AppState, qdrant::KNOWLEDGE_BASE_COLLECTION};
-// use anyhow::{Context, Result};
-// use qdrant_client::Payload;
-// use qdrant_client::qdrant::{PointStruct, UpsertPoints};
 
-// // /// Ingests a document into the Qdrant knowledge base using fastembed.
-// // pub async fn ingest_document(state: AppState, document: String) -> Result<()> {
-// //     // Clone the Arc, not the model itself. This is cheap.
-// //     let model_arc = state.embedding_model.clone();
-
-// //     // Clone the document so it can be moved into the closure but still be
-// //     // available for the payload later.
-// //     let doc_for_embedding = document.clone();
-
-// //     let embeddings = tokio::task::spawn_blocking(move || {
-// //         model_arc.embed(vec![doc_for_embedding], None)
-// //     })
-// //     .await
-// //     .context("Task panicked while generating embeddings")??;
-
-// //     let embedding = embeddings
-// //         .get(0)
-// //         .context("Embedding generation returned no vectors")?
-// //         .to_vec();
-
-// //     // Use the original `document` string for the payload.
-// //     let payload: Payload = serde_json::json!({ "chunk": document }).try_into()?;
-
-// //     let point = PointStruct::new(uuid::Uuid::new_v4().to_string(), embedding, payload);
-
-// //     state
-// //         .qdrant_client
-// //         .upsert_points(UpsertPoints {
-// //             collection_name: KNOWLEDGE_BASE_COLLECTION.to_string(),
-// //             points: vec![point],
-// //             ..Default::default()
-// //         })
-// //         .await?;
-
-// //     Ok(())
-// // }
-
-// /// Ingests a document into the Qdrant knowledge base using fastembed.
-// pub async fn ingest_document(state: AppState, document: String) -> Result<()> {
-//     let model_arc = state.embedding_model.clone();
-//     let doc_for_embedding = document.clone();
-
-//     let embeddings = tokio::task::spawn_blocking(move || {
-//         model_arc.embed(vec![doc_for_embedding], None)
-//     })
-//     .await
-//     .context("Task panicked while generating embeddings")??;
-
-//     let embedding = embeddings
-//         .get(0)
-//         .context("Embedding generation returned no vectors")?
-//         .to_vec();
-
-//     let payload: Payload = serde_json::json!({ "chunk": document }).try_into()?;
-//     let point = PointStruct::new(uuid::Uuid::new_v4().to_string(), embedding, payload);
-
-//     state
-//         .qdrant_client
-//         .upsert_points(UpsertPoints {
-//             collection_name: KNOWLEDGE_BASE_COLLECTION.to_string(),
-//             points: vec![point],
-//             ..Default::default()
-//         })
-//         .await?;
-
-//     Ok(())
-// }
 
 use crate::{AppState, qdrant::KNOWLEDGE_BASE_COLLECTION};
 use anyhow::{Context, Result};
 use qdrant_client::Payload;
 use qdrant_client::qdrant::{PointStruct, UpsertPoints};
 
-/// Ingests a document into the Qdrant knowledge base using fastembed.
+
+
+use serde_json::json;
+use text_splitter::{Characters, ChunkConfig, TextSplitter};
+
+
+
 pub async fn ingest_document(state: AppState, document: String) -> Result<()> {
-    // Clone the Arc, not the model itself. This is cheap.
-    let model_arc = state.embedding_model.clone();
+    let chunk_config = ChunkConfig::<Characters>::new(1000)
+        .with_overlap(100)?
+        .with_trim(true);
 
-    // Clone the document so it can be moved into the closure but still be
-    // available for the payload later.
-    let doc_for_embedding = document.clone();
+    let splitter = TextSplitter::new(chunk_config);
+    let chunks: Vec<String> = splitter
+        .chunks(&document)
+        .map(|s| s.to_owned())
+        .collect();
+    println!("Document split into {} chunks. Processing in batches...", chunks.len());
 
-    let embeddings = tokio::task::spawn_blocking(move || {
-        model_arc.embed(vec![doc_for_embedding], None)
-    })
-    .await
-    .context("Task panicked while generating embeddings")??;
+    const BATCH_SIZE: usize = 32;
 
-    let embedding = embeddings
-        .get(0)
-        .context("Embedding generation returned no vectors")?
-        .to_vec();
+    for chunk_batch in chunks.chunks(BATCH_SIZE) {
+        let batch_size = chunk_batch.len();
+        println!("Processing batch of {} chunks...", batch_size);
 
-    // Use the original `document` string for the payload.
-    let payload: Payload = serde_json::json!({ "chunk": document }).try_into()?;
-
-    let point = PointStruct::new(uuid::Uuid::new_v4().to_string(), embedding, payload);
-
-    state
-        .qdrant_client
-        .upsert_points(UpsertPoints {
-            collection_name: KNOWLEDGE_BASE_COLLECTION.to_string(),
-            points: vec![point],
-            ..Default::default()
+        let model_arc = state.embedding_model.clone();
+        let batch_to_embed = chunk_batch.to_vec();
+        let embeddings = tokio::task::spawn_blocking(move || {
+            model_arc.embed(batch_to_embed, None)
         })
-        .await?;
+        .await
+        .context("Task panicked while generating embeddings")??;
 
+        if embeddings.is_empty() {
+            println!("Warning: Embedding generation returned no vectors for a batch.");
+            continue;
+        }
+
+        let points: Vec<PointStruct> = embeddings
+            .into_iter()
+            .zip(chunk_batch.iter())
+            .map(|(embedding, chunk_text)| {
+                let payload: Payload = json!({ "text": *chunk_text }).try_into().unwrap();
+                PointStruct::new(uuid::Uuid::new_v4().to_string(), embedding, payload)
+            })
+            .collect();
+
+        // ======================== THE IMPORTANT CHANGE IS HERE ========================
+        println!("Attempting to upsert batch of {} points...", points.len());
+        
+        // Capture the result instead of immediately using '?'
+        let upsert_result = state
+            .qdrant_client
+            .upsert_points(UpsertPoints {
+                collection_name: KNOWLEDGE_BASE_COLLECTION.to_string(),
+                points,
+                ..Default::default()
+            })
+            .await;
+
+        // Print the full result from the Qdrant client
+        println!("QDRANT RESPONSE: {:?}", upsert_result);
+        
+        // Now, handle the error if it exists
+        upsert_result?;
+        // ==============================================================================
+    }
+
+    println!("--- Ingestion Complete! All batches processed. ---");
     Ok(())
 }

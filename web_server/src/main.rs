@@ -7,11 +7,7 @@ use app_core::{
     process_query,
 };
 use axum::{
-    Json, Router,
-    extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::{get, post},
+    extract::{DefaultBodyLimit, State}, http::StatusCode, response::{IntoResponse, Response}, routing::{get, post}, Json, Router
 };
 use axum_extra::extract::Multipart;
 use dotenv::dotenv;
@@ -118,7 +114,8 @@ async fn main() -> Result<()> {
         .route("/api/ingest/text", post(api_ingest_text_handler))
         .route("/api/feedback", post(api_feedback_handler))
         .layer(cors)
-        .with_state(app_state);
+        .with_state(app_state)
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)); // axum allows 50 MB in bytes uploads;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     println!("listening on {}", listener.local_addr()?);
@@ -225,6 +222,63 @@ async fn api_ingest_file_handler(
     ingest_document(state.clone(), document_content).await?;
     Ok(StatusCode::OK)
 }
+
+
+// New handler with extensive logging for debugging
+
+// pub async fn api_ingest_file_handler(
+//     State(state): State<AppState>,
+//     mut multipart: Multipart,
+// ) -> Result<StatusCode, AppError> {
+//     println!("\n--- [DEBUG] Entered file ingest handler ---");
+
+//     // Try to get the next field from the multipart stream
+//     match multipart.next_field().await {
+//         Ok(Some(field)) => {
+//             let field_name = field.name().unwrap_or("unknown").to_string();
+//             println!("[DEBUG] Found field: '{}'", field_name);
+
+//             // Check if this is the field we expect
+//             if field_name != "document" {
+//                 let msg = format!("Received unexpected field: '{}'", field_name);
+//                 println!("[DEBUG] ERROR: {}", msg);
+//                 return Err(AppError(anyhow::anyhow!(msg)));
+//             }
+            
+//             println!("[DEBUG] Field is 'document'. Proceeding to read bytes...");
+
+//             // Try to read the bytes from the field
+//             match field.bytes().await {
+//                 Ok(data) => {
+//                     println!("[DEBUG] Successfully read {} bytes from the field.", data.len());
+                    
+//                     // --- Your original logic would go here ---
+//                     // For now, we just return success.
+//                     // let document_content = pdf_extract::extract_text_from_mem(&data)?;
+//                     // ... etc ...
+                    
+//                     println!("[DEBUG] --- Handler finished successfully ---");
+//                     Ok(StatusCode::OK)
+//                 }
+//                 Err(e) => {
+//                     // This is likely where the error is happening
+//                     println!("[DEBUG] FATAL: Failed to read bytes from the field.");
+//                     println!("[DEBUG] The error was: {:?}", e);
+//                     Err(AppError(anyhow::anyhow!("Failed to read file bytes: {}", e)))
+//                 }
+//             }
+//         }
+//         Ok(None) => {
+//             println!("[DEBUG] ERROR: No fields found in multipart request.");
+//             Err(AppError(anyhow::anyhow!("No fields in multipart request.")))
+//         }
+//         Err(e) => {
+//             println!("[DEBUG] FATAL: Error getting next field from multipart stream.");
+//             println!("[DEBUG] The error was: {:?}", e);
+//             Err(AppError(anyhow::anyhow!("Error processing multipart stream: {}", e)))
+//         }
+//     }
+// }
 
 /// Handler for ingesting from a raw text payload.
 async fn api_ingest_text_handler(
