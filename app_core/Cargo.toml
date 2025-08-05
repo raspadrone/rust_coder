@@ -20,3 +20,5 @@ reqwest = { workspace = true, features = ["json"] }
 scraper = "0.19.0"
 duckduckgo_rs = "0.0.1"
 ort = { version = "2.0.0-rc.5", features = ["cuda"]}
+regex = "1.11.1"
+syn = { version = "2.0.104", features = ["visit", "full"] }
