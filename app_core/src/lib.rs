@@ -1,23 +1,23 @@
 #![allow(unused)]
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use config::{Config, File};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use genai::Client;
+use ort::{execution_providers::CUDAExecutionProvider, session::Session};
 use qdrant_client::Qdrant;
 use serde::Deserialize;
 
 use crate::{llm::generate_code, sandbox::run_in_sandbox, web_search::search_and_scrape};
 
-pub mod llm;
-pub mod sandbox;
-pub mod qdrant;
-pub mod ingestion;
 pub mod feedback;
-pub mod web_search;
+pub mod ingestion;
+pub mod llm;
+pub mod qdrant;
+pub mod sandbox;
 pub mod web_scraper;
-
+pub mod web_search;
 
 #[derive(Deserialize, Clone)]
 pub struct AppSettings {
@@ -51,8 +51,20 @@ impl AppState {
         let qdrant_client = Qdrant::from_url(&settings.qdrant_url).build()?;
         let genai_client = Client::default();
         let model = settings.llm_model;
-        // Initialize the embedding model
-        let embedding_model = TextEmbedding::try_new(InitOptions::new(EmbeddingModel::AllMiniLML6V2))?;
+
+        // 1. Create the CUDA execution provider using the correct builder pattern from the documentation.
+        let cuda_provider = CUDAExecutionProvider::default().build();
+
+        // 2. Build the InitOptions, passing the provider in a Vec.
+        let model_options = InitOptions::new(EmbeddingModel::AllMiniLML6V2)
+            .with_execution_providers(vec![cuda_provider])
+            .with_show_download_progress(true);
+
+        // 3. Initialize the TextEmbedding model with the configured options.
+        let embedding_model = Arc::new(
+            TextEmbedding::try_new(model_options)
+                .context("Failed to initialize embedding model with CUDA")?,
+        );
         // initialize qdrant collection if !exists
         qdrant::ensure_collections_exist(&qdrant_client).await?;
         let http_client = Arc::new(reqwest::Client::new());
@@ -60,18 +72,16 @@ impl AppState {
             qdrant_client,
             genai_client,
             model,
-            embedding_model: Arc::new(embedding_model),
-            http_client
+            embedding_model: embedding_model,
+            http_client,
         })
     }
 }
 
-
 /// The core query processing logic.
 pub async fn process_query(query: &str, state: &AppState) -> Result<String> {
     // Step 1: Search the web for fresh, real-time context.
-    let web_context =
-        search_and_scrape(&state.http_client, query).await?;
+    let web_context = search_and_scrape(&state.http_client, query).await?;
 
     // Step 2: Search our internal Qdrant databases for user-ingested knowledge
     // and previously approved solutions.
